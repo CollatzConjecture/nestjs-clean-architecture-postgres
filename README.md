@@ -1,6 +1,6 @@
 # NestJS Clean Architecture with DDD, CQRS & Event Sourcing
 
-This is an advanced boilerplate project implementing **Domain-Driven Design (DDD)**, **Clean Architecture**, **CQRS (Command Query Responsibility Segregation)**, and **Event Sourcing** with NestJS. It provides a robust foundation for building scalable and maintainable enterprise-level applications with **proper separation of concerns** and **clean dependency direction**.
+This is an advanced boilerplate project implementing **Domain-Driven Design (DDD)**, **Clean Architecture**, **CQRS (Command Query Responsibility Segregation)**, **Event Sourcing** and PostgreSQL with NestJS. It provides a robust foundation for building scalable and maintainable enterprise-level applications with **proper separation of concerns** and **clean dependency direction**.
 
 If you want more documentation about NestJS, click here [Nest](https://github.com/nestjs/nest) 
 
