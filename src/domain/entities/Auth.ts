@@ -1,0 +1,9 @@
+import { Role } from '@domain/entities/enums/role.enum';
+
+export class AuthUser {
+    readonly id: string;
+    email: string;
+    password: string;
+    googleId?: string;
+    role: Role[];
+}

@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['nestjs-prometheus:9090']
+        labels:
+          app: nestjs-prometheus
+  - job_name: 'nestjs'
+    static_configs:
+      - targets: ['nestjs-api:4000']
+        labels:
+          app: nestjs-api
+    metrics_path: '/metrics' 
