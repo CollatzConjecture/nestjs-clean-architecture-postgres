@@ -19,6 +19,8 @@ import {
   GOOGLE_CALLBACK_URL,
   GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET,
+  JWT_REFRESH_EXPIRATION_TIME,
+  JWT_REFRESH_SECRET
 } from '@constants';
 import { AuthUser } from '@domain/entities/Auth';
 import { Role } from '@domain/entities/enums/role.enum';
@@ -64,15 +66,8 @@ export class AuthService {
     }
 
     const auth = await this.authRepository.findByEmail(email, true);
-
-    const validatedUser = this.authDomainService.validateUserLogin(
-      email,
-      pass,
-      auth,
-    );
-
-    if (validatedUser && (await bcrypt.compare(pass, auth.password))) {
-      return validatedUser;
+    if (auth && (await bcrypt.compare(pass, auth.password))) {
+      return auth;
     }
     return null;
   }
@@ -88,16 +83,43 @@ export class AuthService {
 
     const auth = await this.authRepository.findByEmail(loginDto.email, true);
 
-    if (!auth || !(await bcrypt.compare(loginDto.password, auth.password))) {
+    if (!auth) {
+      this.logger.logger(`User ${email} not found.`, context);
+      throw new NotFoundException('User not found');
+    }
+    if (!(await bcrypt.compare(loginDto.password, auth.password))) {
       this.logger.warning(`Failed login attempt for user ${email}.`, context);
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    await this.authRepository.update(auth.id, {
+      lastLoginAt: new Date(),
+    });
+
+    const profile = await this.profileRepository.findByAuthId(auth.id);
+
+    // Generate tokens
+    const { accessToken, refreshToken } = await this.generateTokens(auth);
+
+    // Store refresh token hash
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+    await this.authRepository.update(auth.id, {
+      currentHashedRefreshToken: hashedRefreshToken,
+    });
 
     const payload = { email: auth.email, sub: auth.id, roles: auth.role };
 
     this.logger.logger(`User ${email} logged in successfully.`, context);
     return {
-      access_token: this.jwtService.sign(payload),
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      profile: profile
+        ? {
+          id: profile.id,
+          name: profile.name,
+          age: profile.age,
+        }
+        : null,
     };
   }
 
@@ -110,15 +132,69 @@ export class AuthService {
     return { message: 'User logged out successfully.' };
   }
 
-  async refreshToken(user: any) {
-    const payload = { username: user.username, sub: user.sub };
-    this.logger.logger(`Refreshing token for user ${user.username}.`, {
-      module: 'AuthService',
-      method: 'refreshToken',
-    });
-    return {
-      access_token: this.jwtService.sign(payload),
-    };
+  async refreshToken(refreshToken: string) {
+    const context = { module: 'AuthService', method: 'refreshToken' };
+
+    try {
+      // Verify refresh token
+      const payload = this.jwtService.verify(refreshToken, {
+        secret: JWT_REFRESH_SECRET,
+      });
+
+      const auth = await this.authRepository.findById(payload.sub);
+      if (!auth) {
+        throw new UnauthorizedException('User not found');
+      }
+
+      // Check if refresh token is still valid in database
+      if (!auth.currentHashedRefreshToken) {
+        throw new UnauthorizedException('Refresh token revoked');
+      }
+
+      const isRefreshTokenValid = await bcrypt.compare(
+        refreshToken,
+        auth.currentHashedRefreshToken,
+      );
+
+      if (!isRefreshTokenValid) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      // Generate new tokens
+      const { accessToken, refreshToken: newRefreshToken } = await this.generateTokens(auth);
+
+      // Store new refresh token hash (token rotation)
+      const hashedRefreshToken = await bcrypt.hash(newRefreshToken, 10);
+      await this.authRepository.update(auth.id, {
+        currentHashedRefreshToken: hashedRefreshToken,
+      });
+
+      this.logger.logger(`Token refreshed for user ${auth.email}.`, context);
+
+      return {
+        access_token: accessToken,
+        refresh_token: newRefreshToken,
+      };
+    } catch (error) {
+      this.logger.logger(`Token refresh failed: ${error.message}`, context);
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+  }
+
+  private async generateTokens(auth: AuthUser) {
+    const payload = { email: auth.email, sub: auth.id, roles: auth.role };
+
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwtService.signAsync(payload, {
+        expiresIn: '1h', // Access token expires in 1 hour
+      }),
+      this.jwtService.signAsync(payload, {
+        secret: JWT_REFRESH_SECRET,
+        expiresIn: JWT_REFRESH_EXPIRATION_TIME, // Refresh token expires in 7 days
+      }),
+    ]);
+
+    return { accessToken, refreshToken };
   }
 
   async findByAuthId(authId: string): Promise<AuthUser | null> {
@@ -245,6 +321,33 @@ export class AuthService {
 
     const payload = { email: auth.email, sub: auth.id, roles: auth.role };
     return this.jwtService.sign(payload);
+  }
+
+  async changePassword(userId: string, oldPassword: string, newPassword: string): Promise<{ message: string }> {
+    const context = { module: 'AuthService', method: 'changePassword' };
+
+    // Validate new password strength and difference from old
+    this.authDomainService.validatePasswordChangeData({ oldPassword, newPassword });
+
+    const auth = await this.authRepository.findById(userId, true);
+    if (!auth) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Verify old password
+    const isOldPasswordValid = await bcrypt.compare(oldPassword, auth.password);
+    if (!isOldPasswordValid) {
+      throw new UnauthorizedException('Old password is incorrect');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await this.authRepository.update(auth.id, {
+      password: hashedPassword,
+      currentHashedRefreshToken: null,
+    });
+
+    this.logger.logger(`Password changed successfully for user: ${auth.email}`, context);
+    return { message: 'Password changed successfully' };
   }
 
   async deleteByAuthId(authId: string): Promise<{ message: string }> {

@@ -1,41 +1,51 @@
-import { Entity, PrimaryColumn, Column, CreateDateColumn, UpdateDateColumn, OneToOne, BeforeInsert, BeforeUpdate } from 'typeorm';
 import { Role } from '@domain/entities/enums/role.enum';
 import { ProfileEntity } from '@infrastructure/entities/profile.entity';
 import * as bcrypt from 'bcrypt';
+import {
+  BeforeInsert,
+  BeforeUpdate,
+  Column,
+  CreateDateColumn,
+  Entity,
+  OneToOne,
+  PrimaryColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity('auths')
 export class AuthEntity {
-  @PrimaryColumn()
+  @PrimaryColumn({ name: 'id' })
   id: string;
 
-  @Column({ unique: true })
+  @Column({ name: 'email', unique: true })
   email: string;
 
-  @Column({ select: false, nullable: true })
+  @Column({ name: 'password', select: false, nullable: true })
   password?: string;
 
-  @Column({ unique: true, nullable: true })
+  @Column({ name: 'google_id', unique: true, nullable: true })
   googleId?: string;
 
-  @Column('varchar', { 
-    array: true, 
-    default: [Role.USER] 
+  @Column('varchar', {
+    name: 'role',
+    array: true,
+    default: [Role.USER],
   })
   role: Role[];
 
-  @Column({ nullable: true, select: false })
+  @Column({ name: 'current_hashed_refresh_token', nullable: true, select: false })
   currentHashedRefreshToken?: string;
 
-  @Column({ nullable: true })
+  @Column({ name: 'last_login_at', nullable: true })
   lastLoginAt?: Date;
 
   @OneToOne(() => ProfileEntity, profile => profile.auth)
   profile: ProfileEntity;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
   @BeforeInsert()
@@ -44,7 +54,7 @@ export class AuthEntity {
     if (this.password && !this.password.startsWith('$2b$')) {
       this.password = await bcrypt.hash(this.password, 10);
     }
-    
+
     // Ensure role is always set to default if not provided
     if (!this.role || this.role.length === 0) {
       this.role = [Role.USER];
@@ -58,4 +68,4 @@ export class AuthEntity {
       this.password = await bcrypt.hash(this.password, 10);
     }
   }
-} 
+}

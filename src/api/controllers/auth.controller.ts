@@ -1,6 +1,8 @@
+import { ChangePasswordDto } from '@api/dto/auth/change-password.dto';
 import { LoginAuthDto } from '@api/dto/auth/login-auth.dto';
 import { RefreshTokenDto } from '@api/dto/auth/refresh-token.dto';
 import { RegisterAuthDto } from '@api/dto/auth/register-auth.dto';
+import { CurrentUserId } from '@application/decorators/current-user.decorator';
 import { LoggingInterceptor } from '@application/interceptors/logging.interceptor';
 import { AuthService } from '@application/services/auth.service';
 import { ResponseService } from '@application/services/response.service';
@@ -66,6 +68,19 @@ export class AuthController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('change-password')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change password for the current user' })
+  @ApiResponse({ status: 200, description: 'Password changed successfully.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 400, description: 'Bad Request.' })
+  async changePassword(@CurrentUserId() userId: string, @Body() dto: ChangePasswordDto) {
+    const result = await this.authService.changePassword(userId, dto.oldPassword, dto.newPassword);
+    return this.responseService.success(result.message);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Post('logout')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Log out the current user' })
@@ -76,16 +91,12 @@ export class AuthController {
     return this.responseService.success(result.message);
   }
 
-  @UseGuards(AuthGuard('jwt'))
   @Post('refresh-token')
-  @ApiBearerAuth()
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, description: 'New access token generated.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async refreshToken(@Body() refreshTokenDto: RefreshTokenDto) {
-    const result = await this.authService.refreshToken(
-      refreshTokenDto.refresh_token,
-    );
+    const result = await this.authService.refreshToken(refreshTokenDto.refresh_token);
     return this.responseService.success('Token refreshed successfully', result);
   }
 
