@@ -3,6 +3,7 @@ import { DeleteAuthUserHandler } from '@application/auth/command/handler/delete-
 import { GoogleStrategy } from '@application/auth/google.strategy';
 import { JwtStrategy } from '@application/auth/jwt.strategy';
 import { LocalStrategy } from '@application/auth/local.strategy';
+import { ProfileModule } from '@application/profile/profile.module';
 import { AuthService } from '@application/services/auth.service';
 import { JWT_EXPIRATION_TIME, JWT_SECRET } from '@constants';
 import { AuthDomainService } from '@domain/services/auth-domain.service';
@@ -14,7 +15,6 @@ import { CqrsModule } from '@nestjs/cqrs';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ProfileModule } from '@application/profile/profile.module';
 
 export const CommandHandlers = [CreateAuthUserHandler, DeleteAuthUserHandler];
 
@@ -35,11 +35,7 @@ export const CommandHandlers = [CreateAuthUserHandler, DeleteAuthUserHandler];
     JwtStrategy,
     GoogleStrategy,
     AuthService,
-    {
-      provide: AuthDomainService,
-      useFactory: (authRepo) => new AuthDomainService(authRepo),
-      inject: ['IAuthRepository'],
-    },
+    AuthDomainService,
     {
       provide: 'IAuthRepository',
       useClass: AuthRepository,
