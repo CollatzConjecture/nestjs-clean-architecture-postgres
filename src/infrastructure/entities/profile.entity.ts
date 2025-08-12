@@ -1,6 +1,5 @@
-import { Entity, PrimaryColumn, Column, CreateDateColumn, UpdateDateColumn, OneToOne, JoinColumn, OneToMany } from 'typeorm';
+import { Entity, PrimaryColumn, Column, CreateDateColumn, UpdateDateColumn, OneToOne, JoinColumn } from 'typeorm';
 import { AuthEntity } from '@infrastructure/entities/auth.entity';
-import { FinancialAccountEntity } from '@infrastructure/entities/financial-account.entity';
 
 @Entity('profiles')
 export class ProfileEntity {
@@ -46,9 +45,6 @@ export class ProfileEntity {
 
   @Column({ default: 'USD' })
   preferredCurrency: string;
-
-  @OneToMany(() => FinancialAccountEntity, account => account.profile)
-  financialAccounts: FinancialAccountEntity[];
 
   @CreateDateColumn()
   createdAt: Date;

@@ -3,11 +3,11 @@ services:
     image: postgres:15
     container_name: nestjs-postgres
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - '${POSTGRES_PORT:-5432}:5432'
     environment:
-      POSTGRES_DB: "${POSTGRES_DB}"
-      POSTGRES_USER: "${POSTGRES_USER}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: '${POSTGRES_DB}'
+      POSTGRES_USER: '${POSTGRES_USER}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -17,7 +17,7 @@ services:
     image: prom/prometheus:latest
     container_name: nestjs-prometheus
     ports:
-      - "${PROMETHEUS_PORT}:9090"
+      - '${PROMETHEUS_PORT}:9090'
     volumes:
       - ./prometheus:/etc/prometheus
       - prometheus_data:/prometheus
@@ -33,7 +33,7 @@ services:
     image: grafana/grafana:latest
     container_name: nestjs-grafana
     ports:
-      - "${GRAFANA_PORT}:3000"
+      - '${GRAFANA_PORT}:3000'
     volumes:
       - grafana_data:/var/lib/grafana
     environment:

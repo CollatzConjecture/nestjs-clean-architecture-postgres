@@ -205,7 +205,7 @@ This project follows a strict 4-layer architecture:
 
 ## 📋 Prerequisites
 
-- Node.js 18+
+- Node.js 20+
 - Docker and Docker Compose
 - PostgreSQL (included in Docker Compose)
 - Google OAuth2 credentials (for Google login functionality)
