@@ -1,24 +1,27 @@
-import { LoggingInterceptor } from "@application/interceptors/logging.interceptor";
-import { LoggerService } from "@application/services/logger.service";
-import { Controller, UseGuards, UseInterceptors } from "@nestjs/common";
-import { Get } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
-import { ThrottlerGuard } from "@nestjs/throttler";
+import { SuccessResponseDto } from '@api/dto/common/api-response.dto';
+import { LoggingInterceptor } from '@application/interceptors/logging.interceptor';
+import { LoggerService } from '@application/services/logger.service';
+import { ResponseService } from '@application/services/response.service';
+import { Controller, Get, UseInterceptors } from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
-@ApiTags('hello')
 @Controller({
   path: 'hello',
   version: '1'
 })
-@UseGuards(ThrottlerGuard)
+@ApiTags('hello')
 @UseInterceptors(LoggingInterceptor)
 export class HelloController {
-  constructor(private readonly logger: LoggerService) {}
+  constructor(
+    private readonly logger: LoggerService,
+    private readonly responseService: ResponseService
+  ) { }
 
-  @Get()
-  getHello(): string {
-    const context = { module: 'HelloController', method: 'getHello' };
-    this.logger.logger('Hello World endpoint called', context);
-    return 'Hello World';
+  @Get('')
+  @ApiOperation({ summary: 'Get hello message' })
+  @ApiResponse({ status: 200, description: 'Returns hello world message' })
+  get(): SuccessResponseDto<string> {
+    this.logger.logger('Hello World!', { module: 'HelloController', method: 'get' });
+    return this.responseService.success('Hello World!', 'Hello World!');
   }
 }
