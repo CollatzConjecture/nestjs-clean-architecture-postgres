@@ -51,19 +51,69 @@ export class AuthService {
 
   async register(
     registerDto: RegisterAuthDto,
-  ): Promise<{ message: string; authId: string; profileId: string }> {
+  ): Promise<{
+    message: string;
+    authId: string;
+    profileId: string;
+    access_token: string;
+    refresh_token: string;
+    profile: {
+      id: string;
+      authId: string;
+      name: string;
+      lastname?: string;
+      age?: number;
+    } | null;
+  }> {
     const authId = this.authDomainService.generateUserId();
     const profileId = this.profileDomainService.generateProfileId();
+    const context = { module: 'AuthService', method: 'register' };
 
-    await this.commandBus.execute(
-      new CreateAuthUserCommand(registerDto, authId, profileId),
-    );
+    // Execute the registration command
+    await this.commandBus.execute(new CreateAuthUserCommand(registerDto, authId, profileId));
 
-    this.logger.logger(`Registration process started for user ${authId}.`, {
-      module: 'AuthService',
-      method: 'register',
+    // Wait a brief moment for the user to be created in the database
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const auth = await this.authRepository.findById(authId);
+    if (!auth) {
+      this.logger.err(`Failed to find created user with ID: ${authId}`, context);
+      throw new Error('Registration failed - user not found after creation');
+    }
+
+    const { accessToken, refreshToken } = await this.generateTokens(auth);
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+    await this.authRepository.update(auth.id, {
+      currentHashedRefreshToken: hashedRefreshToken,
+      lastLoginAt: new Date(),
     });
-    return { message: 'Registration process started.', authId, profileId };
+
+    // Try to fetch profile (it might be created asynchronously by saga)
+    let profile = null;
+    try {
+      profile = await this.profileRepository.findByAuthId(authId);
+    } catch (_) {
+      // ignore
+    }
+
+    this.logger.logger(`User registered and authenticated successfully: ${auth.email}`, context);
+
+    return {
+      message: 'Registration successful - you are now logged in.',
+      authId,
+      profileId,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      profile: profile
+        ? {
+          id: profile.id,
+          authId: profile.authId,
+          name: profile.name,
+          lastname: profile.lastname,
+          age: profile.age,
+        }
+        : null,
+    };
   }
 
   async validateUser(email: string, pass: string): Promise<AuthUser | null> {
@@ -266,7 +316,7 @@ export class AuthService {
     );
     const user = userInfoResponse.data;
 
-    const jwt = await this.findOrCreateGoogleUser({
+    const result = await this.findOrCreateGoogleUser({
       googleId: user.sub,
       email: user.email,
       firstName: user.given_name,
@@ -278,7 +328,8 @@ export class AuthService {
       module: 'AuthService',
       method: 'findOrCreateGoogleUser',
     });
-    return { access_token: jwt };
+
+    return result;
   }
 
   async mobileGoogleAuth(mobileAuthDto: MobileGoogleAuthDto) {
@@ -309,34 +360,14 @@ export class AuthService {
         googleUserInfo = await this.mobileTokenValidation.validateAuthorizationCode(code, code_verifier, platform);
       }
 
-      const access_token = await this.findOrCreateGoogleUser({
+      const authResponse = await this.findOrCreateGoogleUser({
         googleId: googleUserInfo.googleId,
         email: googleUserInfo.email,
         firstName: googleUserInfo.firstName,
         lastName: googleUserInfo.lastName,
         picture: googleUserInfo.picture,
       });
-
-      const auth = await this.authRepository.findByEmail(googleUserInfo.email, true);
-      const { refreshToken } = await this.generateTokens(auth);
-      const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
-      await this.authRepository.update(auth.id, { currentHashedRefreshToken: hashedRefreshToken });
-
-      const profile = await this.profileRepository.findByAuthId(auth.id);
-
-      return {
-        access_token,
-        refresh_token: refreshToken,
-        profile: profile
-          ? {
-            id: profile.id,
-            authId: profile.authId,
-            name: profile.name,
-            lastname: profile.lastname,
-            age: profile.age,
-          }
-          : null,
-      };
+      return authResponse;
     } catch (error) {
       this.logger.err(`Mobile Google authentication failed for ${platform}: ${error.message}`, context);
 
@@ -367,7 +398,6 @@ export class AuthService {
           googleId: profile.googleId,
         });
       } else {
-        // Check if user exists before creating
         const existingUser = await this.authRepository.findByEmail(
           profile.email,
         );
@@ -387,7 +417,6 @@ export class AuthService {
           role: [Role.USER],
         });
 
-        // Check if profile already exists before creating
         const existingProfile =
           await this.profileRepository.findByAuthId(authId);
         if (this.profileDomainService.canCreateProfile(existingProfile)) {
@@ -402,14 +431,36 @@ export class AuthService {
       }
     }
 
-    const payload = { email: auth.email, sub: auth.id, roles: auth.role };
-    return this.jwtService.sign(payload);
+    await this.authRepository.update(auth.id, {
+      lastLoginAt: new Date(),
+    });
+
+    const { accessToken, refreshToken } = await this.generateTokens(auth);
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+    await this.authRepository.update(auth.id, {
+      currentHashedRefreshToken: hashedRefreshToken,
+    });
+
+    const userProfile = await this.profileRepository.findByAuthId(auth.id);
+
+    return {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      profile: userProfile
+        ? {
+          id: userProfile.id,
+          authId: userProfile.authId,
+          name: userProfile.name,
+          lastname: userProfile.lastname,
+          age: userProfile.age,
+        }
+        : null,
+    };
   }
 
   async changePassword(userId: string, oldPassword: string, newPassword: string): Promise<{ message: string }> {
     const context = { module: 'AuthService', method: 'changePassword' };
 
-    // Validate new password strength and difference from old
     this.authDomainService.validatePasswordChangeData({ oldPassword, newPassword });
 
     const auth = await this.authRepository.findById(userId, true);
@@ -417,7 +468,6 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
-    // Verify old password
     const isOldPasswordValid = await bcrypt.compare(oldPassword, auth.password);
     if (!isOldPasswordValid) {
       throw new UnauthorizedException('Old password is incorrect');
