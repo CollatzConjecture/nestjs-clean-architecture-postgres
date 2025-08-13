@@ -2,6 +2,13 @@ import { AuthUser } from '@domain/entities/Auth';
 import { Role } from '@domain/entities/enums/role.enum';
 import { v4 as uuidv4 } from 'uuid';
 
+export interface MobileOAuthData {
+  platform: 'ios' | 'android';
+  idToken?: string;
+  code?: string;
+  code_verifier?: string;
+}
+
 /**
  * Domain Service for Auth Business Logic
  * Contains pure business rules and logic
@@ -170,6 +177,95 @@ export class AuthDomainService {
     };
 
     return newUser;
+  }
+
+  /**
+ * Business Logic: Validate mobile platform
+ */
+  isPlatformSupported(platform: string): platform is 'ios' | 'android' {
+    return platform === 'ios' || platform === 'android';
+  }
+
+  /**
+   * Business Logic: Validate mobile OAuth authentication data
+   */
+  validateMobileOAuthData(oauthData: MobileOAuthData): void {
+    // Validate platform
+    if (!this.isPlatformSupported(oauthData.platform)) {
+      throw new Error(`Unsupported platform: ${oauthData.platform}`);
+    }
+
+    // Validate authentication flow
+    const hasIdToken = oauthData.idToken && oauthData.idToken.trim() !== '';
+    const hasCode = oauthData.code && oauthData.code.trim() !== '';
+    const hasCodeVerifier = oauthData.code_verifier && oauthData.code_verifier.trim() !== '';
+
+    if (hasIdToken && hasCode) {
+      throw new Error('Cannot provide both idToken and code. Choose one authentication method.');
+    }
+
+    if (!hasIdToken && !hasCode) {
+      throw new Error('Either idToken or code must be provided');
+    }
+
+    if (hasCode && !hasCodeVerifier) {
+      throw new Error('Code verifier is required when using authorization code flow');
+    }
+  }
+
+  /**
+   * Business Logic: Validate ID token format
+   */
+  validateIdTokenFormat(idToken: string): void {
+    if (!idToken || idToken.trim() === '') {
+      throw new Error('ID token is required');
+    }
+  }
+
+  /**
+   * Business Logic: Validate authorization code format
+   */
+  validateAuthorizationCodeFormat(code: string): void {
+    if (!code || code.trim() === '') {
+      throw new Error('Authorization code is required');
+    }
+  }
+
+  /**
+   * Business Logic: Validate PKCE code verifier format
+   */
+  validateCodeVerifierFormat(codeVerifier: string): void {
+    if (!codeVerifier || codeVerifier.trim() === '') {
+      throw new Error('Code verifier is required for PKCE flow');
+    }
+
+    // Validate code verifier length (PKCE requirements)
+    if (codeVerifier.length < 43 || codeVerifier.length > 128) {
+      throw new Error('Code verifier must be between 43 and 128 characters');
+    }
+
+    // Check if code verifier contains only allowed characters
+    const codeVerifierRegex = /^[A-Za-z0-9\-._~]+$/;
+    if (!codeVerifierRegex.test(codeVerifier)) {
+      throw new Error('Code verifier contains invalid characters');
+    }
+  }
+
+  /**
+   * Business Logic: Validate Google user data
+   */
+  validateGoogleUserData(userData: { sub?: string; email?: string }): void {
+    if (!userData.sub) {
+      throw new Error('Invalid user data: missing subject');
+    }
+
+    if (!userData.email) {
+      throw new Error('Invalid user data: missing email');
+    }
+
+    if (!this.isEmailValid(userData.email)) {
+      throw new Error('Invalid email format in user data');
+    }
   }
 
   /**

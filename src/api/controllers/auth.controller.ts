@@ -1,5 +1,7 @@
+import { AuthResponseDto, TokenRefreshResponseDto } from '@api/dto/auth/auth-reponse.dto';
 import { ChangePasswordDto } from '@api/dto/auth/change-password.dto';
 import { LoginAuthDto } from '@api/dto/auth/login-auth.dto';
+import { MobileGoogleAuthDto } from '@api/dto/auth/mobile-google-auth.dto';
 import { RefreshTokenDto } from '@api/dto/auth/refresh-token.dto';
 import { RegisterAuthDto } from '@api/dto/auth/register-auth.dto';
 import { CurrentUserId } from '@application/decorators/current-user.decorator';
@@ -67,6 +69,24 @@ export class AuthController {
     return this.responseService.success('Login successful', result);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('mobile/google')
+  @ApiOperation({
+    summary: 'Mobile Google OAuth authentication',
+    description: 'Authenticate mobile users using Google OAuth. Supports both ID token and authorization code flows with PKCE.'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Mobile authentication successful.',
+    type: AuthResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Bad Request - Invalid platform or missing required fields.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - Invalid Google token or authorization code.' })
+  async mobileGoogleAuth(@Body() mobileAuthDto: MobileGoogleAuthDto) {
+    const result = await this.authService.mobileGoogleAuth(mobileAuthDto);
+    return this.responseService.success('Mobile authentication successful', result);
+  }
+
   @UseGuards(AuthGuard('jwt'))
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('change-password')
@@ -93,7 +113,11 @@ export class AuthController {
 
   @Post('refresh-token')
   @ApiOperation({ summary: 'Refresh access token' })
-  @ApiResponse({ status: 200, description: 'New access token generated.' })
+  @ApiResponse({
+    status: 200,
+    description: 'New access token generated.',
+    type: TokenRefreshResponseDto,
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async refreshToken(@Body() refreshTokenDto: RefreshTokenDto) {
     const result = await this.authService.refreshToken(refreshTokenDto.refresh_token);

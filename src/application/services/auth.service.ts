@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Inject,
   Injectable,
   NotFoundException,
@@ -11,10 +12,13 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
 import { LoginAuthDto } from '@api/dto/auth/login-auth.dto';
+import { MobileGoogleAuthDto } from '@api/dto/auth/mobile-google-auth.dto';
 import { RegisterAuthDto } from '@api/dto/auth/register-auth.dto';
 import { CreateAuthUserCommand } from '@application/auth/command/create-auth-user.command';
 import { DeleteAuthUserCommand } from '@application/auth/command/delete-auth-user.command';
 import { LoggerService } from '@application/services/logger.service';
+import { MobileOAuthConfigService } from '@application/services/mobile-oauth-config.service';
+import { MobileTokenValidationService } from '@application/services/mobile-token-validation.service';
 import {
   GOOGLE_CALLBACK_URL,
   GOOGLE_CLIENT_ID,
@@ -41,6 +45,8 @@ export class AuthService {
     private readonly logger: LoggerService,
     private readonly authDomainService: AuthDomainService,
     private readonly profileDomainService: ProfileDomainService,
+    private readonly mobileTokenValidation: MobileTokenValidationService,
+    private readonly mobileOAuthConfig: MobileOAuthConfigService,
   ) { }
 
   async register(
@@ -116,7 +122,9 @@ export class AuthService {
       profile: profile
         ? {
           id: profile.id,
+          authId: profile.authId,
           name: profile.name,
+          lastname: profile.lastname,
           age: profile.age,
         }
         : null,
@@ -271,6 +279,81 @@ export class AuthService {
       method: 'findOrCreateGoogleUser',
     });
     return { access_token: jwt };
+  }
+
+  async mobileGoogleAuth(mobileAuthDto: MobileGoogleAuthDto) {
+    const { platform, idToken, code, code_verifier } = mobileAuthDto;
+    const context = { module: 'AuthService', method: 'mobileGoogleAuth' };
+
+    try {
+      this.authDomainService.validateMobileOAuthData({
+        platform,
+        idToken,
+        code,
+        code_verifier,
+      });
+
+      if (!this.mobileOAuthConfig.isPlatformConfigured(platform)) {
+        throw new BadRequestException(`Google OAuth not configured for ${platform}`);
+      }
+
+      let googleUserInfo;
+
+      const hasIdToken = idToken && idToken.trim() !== '';
+
+      if (hasIdToken) {
+        // ID Token flow
+        googleUserInfo = await this.mobileTokenValidation.validateIdToken(idToken, platform);
+      } else {
+        // Authorization Code flow with PKCE
+        googleUserInfo = await this.mobileTokenValidation.validateAuthorizationCode(code, code_verifier, platform);
+      }
+
+      const access_token = await this.findOrCreateGoogleUser({
+        googleId: googleUserInfo.googleId,
+        email: googleUserInfo.email,
+        firstName: googleUserInfo.firstName,
+        lastName: googleUserInfo.lastName,
+        picture: googleUserInfo.picture,
+      });
+
+      const auth = await this.authRepository.findByEmail(googleUserInfo.email, true);
+      const { refreshToken } = await this.generateTokens(auth);
+      const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+      await this.authRepository.update(auth.id, { currentHashedRefreshToken: hashedRefreshToken });
+
+      const profile = await this.profileRepository.findByAuthId(auth.id);
+
+      return {
+        access_token,
+        refresh_token: refreshToken,
+        profile: profile
+          ? {
+            id: profile.id,
+            authId: profile.authId,
+            name: profile.name,
+            lastname: profile.lastname,
+            age: profile.age,
+          }
+          : null,
+      };
+    } catch (error) {
+      this.logger.err(`Mobile Google authentication failed for ${platform}: ${error.message}`, context);
+
+      // Convert domain service errors to appropriate HTTP exceptions
+      if (error.message.includes('Unsupported platform') ||
+        error.message.includes('Cannot provide both idToken and code') ||
+        error.message.includes('Either idToken or code must be provided') ||
+        error.message.includes('Code verifier is required')) {
+        throw new BadRequestException(error.message);
+      }
+
+      if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
+        throw error;
+      }
+
+      throw new UnauthorizedException('Mobile authentication failed');
+    }
   }
 
   async findOrCreateGoogleUser(profile: any) {

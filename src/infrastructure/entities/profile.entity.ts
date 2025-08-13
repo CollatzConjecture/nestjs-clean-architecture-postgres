@@ -16,35 +16,11 @@ export class ProfileEntity {
   @Column()
   name: string;
 
-  @Column()
-  lastname: string;
+  @Column({ nullable: true })
+  lastname?: string;
 
   @Column({ nullable: true })
   age?: number;
-
-  @Column({ nullable: true })
-  phoneNumber?: string;
-
-  @Column({ nullable: true })
-  dateOfBirth?: Date;
-
-  @Column({ nullable: true })
-  address?: string;
-
-  @Column({ nullable: true })
-  city?: string;
-
-  @Column({ nullable: true })
-  state?: string;
-
-  @Column({ nullable: true })
-  zipCode?: string;
-
-  @Column({ nullable: true })
-  country?: string;
-
-  @Column({ default: 'USD' })
-  preferredCurrency: string;
 
   @CreateDateColumn()
   createdAt: Date;

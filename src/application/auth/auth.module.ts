@@ -5,6 +5,8 @@ import { JwtStrategy } from '@application/auth/jwt.strategy';
 import { LocalStrategy } from '@application/auth/local.strategy';
 import { ProfileModule } from '@application/profile/profile.module';
 import { AuthService } from '@application/services/auth.service';
+import { MobileOAuthConfigService } from '@application/services/mobile-oauth-config.service';
+import { MobileTokenValidationService } from '@application/services/mobile-token-validation.service';
 import { JWT_EXPIRATION_TIME, JWT_SECRET } from '@constants';
 import { AuthDomainService } from '@domain/services/auth-domain.service';
 import { DatabaseModule } from '@infrastructure/database/database.module';
@@ -36,6 +38,8 @@ export const CommandHandlers = [CreateAuthUserHandler, DeleteAuthUserHandler];
     GoogleStrategy,
     AuthService,
     AuthDomainService,
+    MobileTokenValidationService,
+    MobileOAuthConfigService,
     {
       provide: 'IAuthRepository',
       useClass: AuthRepository,
