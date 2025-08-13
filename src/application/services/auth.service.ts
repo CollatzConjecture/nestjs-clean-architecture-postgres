@@ -52,9 +52,6 @@ export class AuthService {
   async register(
     registerDto: RegisterAuthDto,
   ): Promise<{
-    message: string;
-    authId: string;
-    profileId: string;
     access_token: string;
     refresh_token: string;
     profile: {
@@ -99,9 +96,6 @@ export class AuthService {
     this.logger.logger(`User registered and authenticated successfully: ${auth.email}`, context);
 
     return {
-      message: 'Registration successful - you are now logged in.',
-      authId,
-      profileId,
       access_token: accessToken,
       refresh_token: refreshToken,
       profile: profile
