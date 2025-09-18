@@ -34,6 +34,16 @@ export const GOOGLE_ANDROID_CLIENT_ID = process.env.GOOGLE_ANDROID_CLIENT_ID;
 export const GOOGLE_MOBILE_CALLBACK_IOS_URL = process.env.GOOGLE_MOBILE_CALLBACK_IOS_URL;
 export const GOOGLE_MOBILE_CALLBACK_ANDROID_URL = process.env.GOOGLE_MOBILE_CALLBACK_ANDROID_URL;
 
+// Apple OAuth Constants
+export const APPLE_TEAM_ID = process.env.APPLE_TEAM_ID;
+export const APPLE_KEY_ID = process.env.APPLE_KEY_ID;
+export const APPLE_PRIVATE_KEY = process.env.APPLE_PRIVATE_KEY;
+export const APPLE_IOS_CLIENT_ID = process.env.APPLE_IOS_CLIENT_ID;
+export const APPLE_ANDROID_CLIENT_ID = process.env.APPLE_ANDROID_CLIENT_ID;
+// Optional additional audiences (comma-separated) to accept for aud validation
+export const APPLE_IOS_ADDITIONAL_AUDIENCES = process.env.APPLE_IOS_ADDITIONAL_AUDIENCES;
+export const APPLE_ANDROID_ADDITIONAL_AUDIENCES = process.env.APPLE_ANDROID_ADDITIONAL_AUDIENCES;
+
 // Encryption Constants
 if (!process.env.EMAIL_ENCRYPTION_KEY) {
   throw new Error('FATAL ERROR: EMAIL_ENCRYPTION_KEY is not defined in environment variables.');

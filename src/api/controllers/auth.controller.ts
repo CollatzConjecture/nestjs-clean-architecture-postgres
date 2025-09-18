@@ -1,6 +1,7 @@
 import { AuthResponseDto, TokenRefreshResponseDto } from '@api/dto/auth/auth-reponse.dto';
 import { ChangePasswordDto } from '@api/dto/auth/change-password.dto';
 import { LoginAuthDto } from '@api/dto/auth/login-auth.dto';
+import { MobileAppleAuthDto } from "@api/dto/auth/mobile-apple-auth.dto";
 import { MobileGoogleAuthDto } from '@api/dto/auth/mobile-google-auth.dto';
 import { RefreshTokenDto } from '@api/dto/auth/refresh-token.dto';
 import { RegisterAuthDto } from '@api/dto/auth/register-auth.dto';
@@ -85,6 +86,24 @@ export class AuthController {
   async mobileGoogleAuth(@Body() mobileAuthDto: MobileGoogleAuthDto) {
     const result = await this.authService.mobileGoogleAuth(mobileAuthDto);
     return this.responseService.success('Mobile authentication successful', result);
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('mobile/apple')
+  @ApiOperation({
+    summary: 'Mobile Apple OAuth authentication',
+    description: 'Authenticate mobile users using Apple Sign In with ID token.'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Mobile Apple authentication successful.',
+    type: AuthResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Bad Request - Invalid platform or missing required fields.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - Invalid Apple ID token.' })
+  async mobileAppleAuth(@Body() mobileAuthDto: MobileAppleAuthDto) {
+    const result = await this.authService.mobileAppleAuth(mobileAuthDto);
+    return this.responseService.success('Mobile Apple authentication successful', result);
   }
 
   @UseGuards(AuthGuard('jwt'))

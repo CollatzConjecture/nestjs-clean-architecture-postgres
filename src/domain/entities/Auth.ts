@@ -5,6 +5,7 @@ export class AuthUser {
   email: string;
   password: string;
   googleId?: string;
+  appleId?: string;
   role: Role[];
   currentHashedRefreshToken?: string;
   lastLoginAt?: Date;

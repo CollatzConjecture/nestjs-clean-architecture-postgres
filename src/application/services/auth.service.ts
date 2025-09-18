@@ -12,10 +12,15 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
 import { LoginAuthDto } from '@api/dto/auth/login-auth.dto';
+import { MobileAppleAuthDto } from '@api/dto/auth/mobile-apple-auth.dto';
 import { MobileGoogleAuthDto } from '@api/dto/auth/mobile-google-auth.dto';
 import { RegisterAuthDto } from '@api/dto/auth/register-auth.dto';
+import { AppleAuthUserPayload, CreateAppleAuthUserCommand } from '@application/auth/command/create-apple-auth-user.command';
+import { CreateGoogleAuthUserCommand, GoogleAuthUserPayload } from '@application/auth/command/create-google-auth-user.command';
 import { CreateAuthUserCommand } from '@application/auth/command/create-auth-user.command';
 import { DeleteAuthUserCommand } from '@application/auth/command/delete-auth-user.command';
+import { AppleOAuthConfigService } from '@application/services/apple-oauth-config.service';
+import { AppleTokenValidationService } from '@application/services/apple-token-validation.service';
 import { LoggerService } from '@application/services/logger.service';
 import { MobileOAuthConfigService } from '@application/services/mobile-oauth-config.service';
 import { MobileTokenValidationService } from '@application/services/mobile-token-validation.service';
@@ -27,7 +32,6 @@ import {
   JWT_REFRESH_SECRET
 } from '@constants';
 import { AuthUser } from '@domain/entities/Auth';
-import { Role } from '@domain/entities/enums/role.enum';
 import { IAuthRepository } from '@domain/interfaces/repositories/auth-repository.interface';
 import { IProfileRepository } from '@domain/interfaces/repositories/profile-repository.interface';
 import { AuthDomainService } from '@domain/services/auth-domain.service';
@@ -47,6 +51,8 @@ export class AuthService {
     private readonly profileDomainService: ProfileDomainService,
     private readonly mobileTokenValidation: MobileTokenValidationService,
     private readonly mobileOAuthConfig: MobileOAuthConfigService,
+    private readonly appleTokenValidation: AppleTokenValidationService,
+    private readonly appleOAuthConfig: AppleOAuthConfigService,
   ) { }
 
   async register(
@@ -313,8 +319,9 @@ export class AuthService {
     const result = await this.findOrCreateGoogleUser({
       googleId: user.sub,
       email: user.email,
-      firstName: user.given_name,
-      lastName: user.family_name,
+      firstName: user.given_name || 'Google User',
+      lastName: user.family_name || '',
+      age: 0,
       picture: user.picture,
     });
 
@@ -354,13 +361,16 @@ export class AuthService {
         googleUserInfo = await this.mobileTokenValidation.validateAuthorizationCode(code, code_verifier, platform);
       }
 
-      const authResponse = await this.findOrCreateGoogleUser({
+      const googleProfile: GoogleAuthUserPayload & { picture?: string } = {
         googleId: googleUserInfo.googleId,
         email: googleUserInfo.email,
-        firstName: googleUserInfo.firstName,
-        lastName: googleUserInfo.lastName,
+        firstName: googleUserInfo.firstName || 'Google User',
+        lastName: googleUserInfo.lastName || '',
+        age: 0,
         picture: googleUserInfo.picture,
-      });
+      };
+
+      const authResponse = await this.findOrCreateGoogleUser(googleProfile);
       return authResponse;
     } catch (error) {
       this.logger.err(`Mobile Google authentication failed for ${platform}: ${error.message}`, context);
@@ -381,7 +391,54 @@ export class AuthService {
     }
   }
 
-  async findOrCreateGoogleUser(profile: any) {
+  async mobileAppleAuth(mobileAuthDto: MobileAppleAuthDto) {
+    const { platform, idToken } = mobileAuthDto;
+    const context = { module: 'AuthService', method: 'mobileAppleAuth' };
+
+    try {
+      this.authDomainService.validateAppleIdTokenFormat(idToken);
+
+      const configValidation = this.appleOAuthConfig.validatePlatformConfiguration(platform);
+      if (!configValidation.valid) {
+        this.logger.err(
+          `Apple OAuth configuration invalid for ${platform}: ${configValidation.errors.join(', ')}`,
+          context,
+        );
+        throw new BadRequestException(
+          `Apple OAuth not properly configured for ${platform}: ${configValidation.errors.join(', ')}`,
+        );
+      }
+
+      const appleUserInfo = await this.appleTokenValidation.validateIdToken(idToken, platform);
+
+      const appleProfile: AppleAuthUserPayload = {
+        appleId: appleUserInfo.appleId,
+        email: appleUserInfo.email,
+        firstName: appleUserInfo.firstName || 'Apple User',
+        lastName: appleUserInfo.lastName || '',
+        age: 0,
+      };
+
+      const result = await this.findOrCreateAppleUser(appleProfile);
+
+      return result;
+    } catch (error) {
+      this.logger.err(
+        `Mobile Apple authentication failed for ${platform}: ${error.message}`,
+        context,
+      );
+
+      if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
+        throw error;
+      }
+
+      throw new UnauthorizedException('Apple authentication failed');
+    }
+  }
+
+  async findOrCreateGoogleUser(profile: GoogleAuthUserPayload & { picture?: string }) {
+    const context = { module: 'AuthService', method: 'findOrCreateGoogleUser' };
+
     let auth = await this.authRepository.findByGoogleId(profile.googleId);
 
     if (!auth) {
@@ -392,35 +449,36 @@ export class AuthService {
           googleId: profile.googleId,
         });
       } else {
-        const existingUser = await this.authRepository.findByEmail(
-          profile.email,
-        );
+        const existingUser = await this.authRepository.findByEmail(profile.email);
         const canCreate = this.authDomainService.canCreateUser(existingUser);
         if (!canCreate) {
-          throw new Error('User already exists with this email');
+          throw new BadRequestException('User already exists with this email');
         }
 
         const authId = this.authDomainService.generateUserId();
         const profileId = this.profileDomainService.generateProfileId();
 
-        auth = await this.authRepository.create({
-          id: authId,
-          googleId: profile.googleId,
-          email: profile.email,
-          password: '',
-          role: [Role.USER],
-        });
+        await this.commandBus.execute(
+          new CreateGoogleAuthUserCommand(
+            {
+              email: profile.email,
+              firstName: profile.firstName || 'Google User',
+              lastName: profile.lastName || '',
+              googleId: profile.googleId,
+              age: profile.age ?? 0,
+            },
+            authId,
+            profileId,
+          ),
+        );
 
-        const existingProfile =
-          await this.profileRepository.findByAuthId(authId);
-        if (this.profileDomainService.canCreateProfile(existingProfile)) {
-          await this.profileRepository.create({
-            id: profileId,
-            authId: authId,
-            name: profile.firstName,
-            lastname: profile.lastName,
-            age: 0,
-          });
+        // Wait a brief moment for the user to be created in the database
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        auth = await this.authRepository.findById(authId);
+        if (!auth) {
+          this.logger.err(`Failed to find created Google user with ID: ${authId}`, context);
+          throw new Error('Google registration failed - user not found after creation');
         }
       }
     }
@@ -429,7 +487,10 @@ export class AuthService {
       lastLoginAt: new Date(),
     });
 
+    await this.updateProfileWithGoogleData(auth.id, profile);
+
     const { accessToken, refreshToken } = await this.generateTokens(auth);
+
     const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
     await this.authRepository.update(auth.id, {
       currentHashedRefreshToken: hashedRefreshToken,
@@ -450,6 +511,161 @@ export class AuthService {
         }
         : null,
     };
+  }
+
+  /**
+   * Update profile with Google account information
+   */
+  private async updateProfileWithGoogleData(
+    authId: string,
+    googleProfile: GoogleAuthUserPayload & { picture?: string },
+  ) {
+    const context = { module: 'AuthService', method: 'updateProfileWithGoogleData' };
+
+    try {
+      const existingProfile = await this.profileRepository.findByAuthId(authId);
+
+      if (existingProfile) {
+        // Update profile with Google data if name is not set or different
+        const updates: any = {};
+
+        if (
+          googleProfile.firstName &&
+          (!existingProfile.name || existingProfile.name === 'Google User')
+        ) {
+          updates.name = googleProfile.firstName;
+        }
+
+        if (
+          googleProfile.lastName &&
+          (!existingProfile.lastname || existingProfile.lastname === '')
+        ) {
+          updates.lastname = googleProfile.lastName;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await this.profileRepository.update(existingProfile.id, updates);
+        }
+      }
+    } catch (error) {
+      this.logger.err(`Failed to update profile with Google data: ${error.message}`, context);
+      // Don't throw error as this is not critical for authentication
+    }
+  }
+
+  async findOrCreateAppleUser(profile: AppleAuthUserPayload) {
+    const context = { module: 'AuthService', method: 'findOrCreateAppleUser' };
+
+    let auth = await this.authRepository.findByAppleId(profile.appleId);
+
+    if (!auth) {
+      auth = await this.authRepository.findByEmail(profile.email);
+
+      if (auth) {
+        auth = await this.authRepository.update(auth.id, {
+          appleId: profile.appleId,
+        });
+      } else {
+        const existingUser = await this.authRepository.findByEmail(profile.email);
+        const canCreate = this.authDomainService.canCreateUser(existingUser);
+        if (!canCreate) {
+          throw new BadRequestException('User already exists with this email');
+        }
+
+        const authId = this.authDomainService.generateUserId();
+        const profileId = this.profileDomainService.generateProfileId();
+
+        await this.commandBus.execute(
+          new CreateAppleAuthUserCommand(
+            {
+              email: profile.email,
+              firstName: profile.firstName || 'Apple User',
+              lastName: profile.lastName || '',
+              appleId: profile.appleId,
+              age: profile.age ?? 0,
+            },
+            authId,
+            profileId,
+          ),
+        );
+
+        // Wait a brief moment for the user to be created in the database
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        auth = await this.authRepository.findById(authId);
+        if (!auth) {
+          this.logger.err(`Failed to find created Apple user with ID: ${authId}`, context);
+          throw new Error('Apple registration failed - user not found after creation');
+        }
+      }
+    }
+
+    await this.authRepository.update(auth.id, {
+      lastLoginAt: new Date(),
+    });
+
+    await this.updateProfileWithAppleData(auth.id, profile);
+
+    const { accessToken, refreshToken } = await this.generateTokens(auth);
+
+    // Store refresh token hash
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+    await this.authRepository.update(auth.id, {
+      currentHashedRefreshToken: hashedRefreshToken,
+    });
+
+    const userProfile = await this.profileRepository.findByAuthId(auth.id);
+
+    return {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      profile: userProfile
+        ? {
+          id: userProfile.id,
+          authId: userProfile.authId,
+          name: userProfile.name,
+          lastname: userProfile.lastname,
+          age: userProfile.age,
+        }
+        : null
+    };
+  }
+
+  /**
+   * Update profile with Apple account information
+   */
+  private async updateProfileWithAppleData(authId: string, appleProfile: AppleAuthUserPayload) {
+    const context = { module: 'AuthService', method: 'updateProfileWithAppleData' };
+
+    try {
+      const existingProfile = await this.profileRepository.findByAuthId(authId);
+
+      if (existingProfile) {
+        // Update profile with Apple data if name is not set or different
+        const updates: any = {};
+
+        if (
+          appleProfile.firstName &&
+          (!existingProfile.name || existingProfile.name === 'Apple User')
+        ) {
+          updates.name = appleProfile.firstName;
+        }
+
+        if (
+          appleProfile.lastName &&
+          (!existingProfile.lastname || existingProfile.lastname === '')
+        ) {
+          updates.lastname = appleProfile.lastName;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await this.profileRepository.update(existingProfile.id, updates);
+        }
+      }
+    } catch (error) {
+      this.logger.err(`Failed to update profile with Apple data: ${error.message}`, context);
+      // Don't throw error as this is not critical for authentication
+    }
   }
 
   async changePassword(userId: string, oldPassword: string, newPassword: string): Promise<{ message: string }> {

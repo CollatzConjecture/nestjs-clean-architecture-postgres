@@ -26,6 +26,9 @@ export class AuthEntity {
   @Column({ name: 'google_id', unique: true, nullable: true })
   googleId?: string;
 
+  @Column({ name: 'apple_id', unique: true, nullable: true })
+  appleId?: string;
+
   @Column('varchar', {
     name: 'role',
     array: true,

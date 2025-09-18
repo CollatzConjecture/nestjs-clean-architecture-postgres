@@ -3,7 +3,7 @@ import { IAuthRepository } from '@domain/interfaces/repositories/auth-repository
 import { AuthEntity } from '@infrastructure/entities/auth.entity';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 
 export type AuthUserResponse = AuthUser & {
   createdAt: Date;
@@ -54,6 +54,13 @@ export class AuthRepository implements IAuthRepository {
     return auth ? this.mapToAuthUser(auth) : null;
   }
 
+  async findByAppleId(appleId: string): Promise<AuthUser | null> {
+    const auth = await this.authRepository.findOne({
+      where: { appleId, deletedAt: IsNull() } as any,
+    });
+    return auth ? this.mapToAuthUser(auth) : null;
+  }
+
   async update(id: string, authData: Partial<AuthUser>): Promise<AuthUser> {
     const result = await this.authRepository.update({ id }, authData);
 
@@ -83,6 +90,7 @@ export class AuthRepository implements IAuthRepository {
       email: authEntity.email,
       password: authEntity.password || '',
       googleId: authEntity.googleId,
+      appleId: authEntity.appleId,
       role: authEntity.role,
       currentHashedRefreshToken: authEntity.currentHashedRefreshToken,
       createdAt: authEntity.createdAt,

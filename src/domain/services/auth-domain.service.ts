@@ -269,6 +269,32 @@ export class AuthDomainService {
   }
 
   /**
+   * Business Logic: Validate Apple user data
+   */
+  validateAppleUserData(userData: { sub?: string; email?: string }): void {
+    if (!userData.sub) {
+      throw new Error('Invalid user data: missing subject');
+    }
+
+    if (!userData.email) {
+      throw new Error('Invalid user data: missing email');
+    }
+
+    if (!this.isEmailValid(userData.email)) {
+      throw new Error('Invalid email format in user data');
+    }
+  }
+
+  /**
+   * Business Logic: Validate Apple ID token format
+   */
+  validateAppleIdTokenFormat(idToken: string): void {
+    if (!idToken || idToken.trim() === '') {
+      throw new Error('Apple ID token is required');
+    }
+  }
+
+  /**
  * Business Logic: Validate password change data
  */
   validatePasswordChangeData(data: { oldPassword: string; newPassword: string }): void {

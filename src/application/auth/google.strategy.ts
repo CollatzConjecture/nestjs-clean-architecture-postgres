@@ -17,15 +17,14 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
 
   async validate(accessToken: string, refreshToken: string, profile: any, done: VerifyCallback): Promise<any> {
     const { name, emails, photos, id } = profile;
-    const user = {
+    const jwt = await this.authService.findOrCreateGoogleUser({
       googleId: id,
       email: emails[0].value,
-      firstName: name.givenName,
-      lastName: name.familyName,
-      picture: photos[0].value,
-      accessToken,
-    };
-    const jwt = await this.authService.findOrCreateGoogleUser(user);
+      firstName: name.givenName || 'Google User',
+      lastName: name.familyName || '',
+      age: 0,
+      picture: photos?.[0]?.value,
+    });
     done(null, { jwt });
   }
 } 

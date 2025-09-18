@@ -1,3 +1,4 @@
+import { JWKSTokenValidationService } from '@application/services/jwks-token-validation.service';
 import { LoggerService } from '@application/services/logger.service';
 import { MobileOAuthConfigService } from '@application/services/mobile-oauth-config.service';
 import { AuthDomainService } from '@domain/services/auth-domain.service';
@@ -18,64 +19,45 @@ export class MobileTokenValidationService {
     private readonly mobileOAuthConfig: MobileOAuthConfigService,
     private readonly logger: LoggerService,
     private readonly authDomainService: AuthDomainService,
+    private readonly jwksTokenValidation: JWKSTokenValidationService,
   ) { }
 
   /**
    * Validate Google ID token for mobile authentication (simplified for MVP)
    */
-  async validateIdToken(idToken: string, platform: 'ios' | 'android'): Promise<GoogleUserInfo> {
+  async validateIdToken(
+    idToken: string,
+    platform: 'ios' | 'android',
+    nonce?: string,
+  ): Promise<GoogleUserInfo> {
     const context = { module: 'MobileTokenValidationService', method: 'validateIdToken' };
 
     try {
       this.logger.logger(`Validating ID token for ${platform} platform`, context);
-
       this.authDomainService.validateIdTokenFormat(idToken);
 
-      const tokenInfoResponse = await axios.get('https://oauth2.googleapis.com/tokeninfo', {
-        params: { id_token: idToken },
+      if (!this.jwksTokenValidation.isJWKSInitialized()) {
+        this.logger.logger(`JWKS not initialized, attempting to refresh for ${platform}`, context);
+        await this.jwksTokenValidation.refreshJWKS();
+
+        if (!this.jwksTokenValidation.isJWKSInitialized()) {
+          throw new UnauthorizedException('Unable to initialize JWT validation service');
+        }
+      }
+
+      const verifiedUserInfo = await this.jwksTokenValidation.verifyIdToken(idToken, platform, nonce);
+
+      this.authDomainService.validateGoogleUserData({
+        sub: verifiedUserInfo.googleId,
+        email: verifiedUserInfo.email,
       });
 
-      const tokenInfo = tokenInfoResponse.data as {
-        iss?: string;
-        aud?: string;
-        exp?: string;
-        sub?: string;
-        email?: string;
-        given_name?: string;
-        family_name?: string;
-        name?: string;
-        picture?: string;
-      };
-
-      // Validate issuer
-      const issuer = tokenInfo.iss;
-      const isIssuerValid = issuer === 'accounts.google.com' || issuer === 'https://accounts.google.com';
-      if (!isIssuerValid) {
-        throw new UnauthorizedException('Invalid ID token issuer');
-      }
-
-      // Validate audience matches the platform-specific client ID
-      const expectedAudience = this.mobileOAuthConfig.getAudience(platform);
-      if (!tokenInfo.aud || tokenInfo.aud !== expectedAudience) {
-        throw new UnauthorizedException('Invalid ID token audience');
-      }
-
-      // Validate expiration
-      const expSeconds = tokenInfo.exp ? parseInt(tokenInfo.exp, 10) : 0;
-      const nowSeconds = Math.floor(Date.now() / 1000);
-      if (!expSeconds || expSeconds <= nowSeconds) {
-        throw new UnauthorizedException('ID token has expired');
-      }
-
-      // Validate required user fields (sub/email)
-      this.authDomainService.validateGoogleUserData({ sub: tokenInfo.sub, email: tokenInfo.email });
-
       const userInfo: GoogleUserInfo = {
-        googleId: tokenInfo.sub as string,
-        email: tokenInfo.email as string,
-        firstName: tokenInfo.given_name || tokenInfo.name || 'Google User',
-        lastName: tokenInfo.family_name || (tokenInfo.name ? String(tokenInfo.name).split(' ').slice(1).join(' ') : ''),
-        picture: tokenInfo.picture || '',
+        googleId: verifiedUserInfo.googleId,
+        email: verifiedUserInfo.email,
+        firstName: verifiedUserInfo.firstName,
+        lastName: verifiedUserInfo.lastName,
+        picture: verifiedUserInfo.picture,
       };
 
       this.logger.logger(`ID token validation successful for ${platform}`, context);
@@ -86,10 +68,6 @@ export class MobileTokenValidationService {
 
       if (error instanceof UnauthorizedException || error instanceof BadRequestException) {
         throw error;
-      }
-
-      if (error.response?.status === 401 || error.response?.status === 400) {
-        throw new UnauthorizedException('Invalid ID token');
       }
 
       // Convert domain service errors to appropriate HTTP exceptions
@@ -214,4 +192,4 @@ export class MobileTokenValidationService {
       throw new UnauthorizedException('Failed to fetch user information');
     }
   }
-} 
+}
