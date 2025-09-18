@@ -16,7 +16,7 @@ export class AuthRepository implements IAuthRepository {
   constructor(
     @InjectRepository(AuthEntity)
     private readonly authRepository: Repository<AuthEntity>,
-  ) { }
+  ) {}
 
   async create(authData: Partial<AuthUser>): Promise<AuthUser> {
     const newAuth = this.authRepository.create(authData);
@@ -24,8 +24,12 @@ export class AuthRepository implements IAuthRepository {
     return this.mapToAuthUser(savedAuth);
   }
 
-  async findByEmail(email: string, withPassword?: boolean): Promise<AuthUser | null> {
-    const queryBuilder = this.authRepository.createQueryBuilder('auth')
+  async findByEmail(
+    email: string,
+    withPassword?: boolean,
+  ): Promise<AuthUser | null> {
+    const queryBuilder = this.authRepository
+      .createQueryBuilder('auth')
       .where('auth.email = :email', { email });
 
     if (withPassword) {
@@ -38,7 +42,8 @@ export class AuthRepository implements IAuthRepository {
   }
 
   async findById(id: string, withPassword?: boolean): Promise<AuthUser | null> {
-    const queryBuilder = this.authRepository.createQueryBuilder('auth')
+    const queryBuilder = this.authRepository
+      .createQueryBuilder('auth')
       .addSelect('auth.currentHashedRefreshToken')
       .where('auth.id = :id', { id });
 

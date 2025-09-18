@@ -1,7 +1,7 @@
 import { AuthResponseDto, TokenRefreshResponseDto } from '@api/dto/auth/auth-reponse.dto';
 import { ChangePasswordDto } from '@api/dto/auth/change-password.dto';
 import { LoginAuthDto } from '@api/dto/auth/login-auth.dto';
-import { MobileAppleAuthDto } from "@api/dto/auth/mobile-apple-auth.dto";
+import { MobileAppleAuthDto } from '@api/dto/auth/mobile-apple-auth.dto';
 import { MobileGoogleAuthDto } from '@api/dto/auth/mobile-google-auth.dto';
 import { RefreshTokenDto } from '@api/dto/auth/refresh-token.dto';
 import { RegisterAuthDto } from '@api/dto/auth/register-auth.dto';

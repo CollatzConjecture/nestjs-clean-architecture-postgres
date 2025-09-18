@@ -15,22 +15,33 @@ export class RegistrationSaga {
   userCreated = (events$: Observable<any>): Observable<ICommand> => {
     return events$.pipe(
       ofType(AuthUserCreatedEvent),
-      map(event => {
-        this.logger.log(`Saga continues: mapping AuthUserCreatedEvent to CreateProfileCommand for user ${event.authId}`);
-        return new CreateProfileCommand(event.profileId, event.authId, event.name, event.lastname, event.age);
+      map((event) => {
+        this.logger.log(
+          `Saga continues: mapping AuthUserCreatedEvent to CreateProfileCommand 
+          for user ${event.authId}`,
+        );
+        return new CreateProfileCommand(
+          event.profileId,
+          event.authId,
+          event.name,
+          event.lastname,
+          event.age,
+        );
       }),
     );
-  }
+  };
 
   @Saga()
   profileCreationFailed = (events$: Observable<any>): Observable<ICommand> => {
     return events$.pipe(
       ofType(ProfileCreationFailedEvent),
-      map(event => {
-        this.logger.warn(`Saga compensates: mapping ProfileCreationFailedEvent to DeleteAuthUserCommand for user ${event.authId}`);
+      map((event) => {
+        this.logger.warn(
+          `Saga compensates: mapping ProfileCreationFailedEvent to DeleteAuthUserCommand 
+          for user ${event.authId}`,
+        );
         return new DeleteAuthUserCommand(event.authId, event.profileId);
-      })
+      }),
     );
-  }
-
+  };
 }

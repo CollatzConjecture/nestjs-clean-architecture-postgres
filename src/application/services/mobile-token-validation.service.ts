@@ -2,7 +2,11 @@ import { JWKSTokenValidationService } from '@application/services/jwks-token-val
 import { LoggerService } from '@application/services/logger.service';
 import { MobileOAuthConfigService } from '@application/services/mobile-oauth-config.service';
 import { AuthDomainService } from '@domain/services/auth-domain.service';
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import axios from 'axios';
 
 export interface GoogleUserInfo {
@@ -20,7 +24,7 @@ export class MobileTokenValidationService {
     private readonly logger: LoggerService,
     private readonly authDomainService: AuthDomainService,
     private readonly jwksTokenValidation: JWKSTokenValidationService,
-  ) { }
+  ) {}
 
   /**
    * Validate Google ID token for mobile authentication (simplified for MVP)
@@ -30,22 +34,37 @@ export class MobileTokenValidationService {
     platform: 'ios' | 'android',
     nonce?: string,
   ): Promise<GoogleUserInfo> {
-    const context = { module: 'MobileTokenValidationService', method: 'validateIdToken' };
+    const context = {
+      module: 'MobileTokenValidationService',
+      method: 'validateIdToken',
+    };
 
     try {
-      this.logger.logger(`Validating ID token for ${platform} platform`, context);
+      this.logger.logger(
+        `Validating ID token for ${platform} platform`,
+        context,
+      );
       this.authDomainService.validateIdTokenFormat(idToken);
 
       if (!this.jwksTokenValidation.isJWKSInitialized()) {
-        this.logger.logger(`JWKS not initialized, attempting to refresh for ${platform}`, context);
+        this.logger.logger(
+          `JWKS not initialized, attempting to refresh for ${platform}`,
+          context,
+        );
         await this.jwksTokenValidation.refreshJWKS();
 
         if (!this.jwksTokenValidation.isJWKSInitialized()) {
-          throw new UnauthorizedException('Unable to initialize JWT validation service');
+          throw new UnauthorizedException(
+            'Unable to initialize JWT validation service',
+          );
         }
       }
 
-      const verifiedUserInfo = await this.jwksTokenValidation.verifyIdToken(idToken, platform, nonce);
+      const verifiedUserInfo = await this.jwksTokenValidation.verifyIdToken(
+        idToken,
+        platform,
+        nonce,
+      );
 
       this.authDomainService.validateGoogleUserData({
         sub: verifiedUserInfo.googleId,
@@ -60,13 +79,22 @@ export class MobileTokenValidationService {
         picture: verifiedUserInfo.picture,
       };
 
-      this.logger.logger(`ID token validation successful for ${platform}`, context);
+      this.logger.logger(
+        `ID token validation successful for ${platform}`,
+        context,
+      );
 
       return userInfo;
     } catch (error) {
-      this.logger.err(`ID token validation failed for ${platform}: ${error.message}`, context);
+      this.logger.err(
+        `ID token validation failed for ${platform}: ${error.message}`,
+        context,
+      );
 
-      if (error instanceof UnauthorizedException || error instanceof BadRequestException) {
+      if (
+        error instanceof UnauthorizedException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
 
@@ -87,10 +115,16 @@ export class MobileTokenValidationService {
     codeVerifier: string,
     platform: 'ios' | 'android',
   ): Promise<GoogleUserInfo> {
-    const context = { module: 'MobileTokenValidationService', method: 'validateAuthorizationCode' };
+    const context = {
+      module: 'MobileTokenValidationService',
+      method: 'validateAuthorizationCode',
+    };
 
     try {
-      this.logger.logger(`Exchanging authorization code for ${platform} platform`, context);
+      this.logger.logger(
+        `Exchanging authorization code for ${platform} platform`,
+        context,
+      );
 
       this.authDomainService.validateAuthorizationCodeFormat(code);
       this.authDomainService.validateCodeVerifierFormat(codeVerifier);
@@ -124,28 +158,41 @@ export class MobileTokenValidationService {
       // Get user info using the access token
       return await this.getUserInfoFromAccessToken(access_token);
     } catch (error) {
-      this.logger.err(`Authorization code validation failed for ${platform}: ${error.message}`, context);
+      this.logger.err(
+        `Authorization code validation failed for ${platform}: ${error.message}`,
+        context,
+      );
       if (error.response) {
-        this.logger.err(`Google error: ${JSON.stringify(error.response.data)}`, context);
+        this.logger.err(
+          `Google error: ${JSON.stringify(error.response.data)}`,
+          context,
+        );
       }
 
-      if (error instanceof UnauthorizedException || error instanceof BadRequestException) {
+      if (
+        error instanceof UnauthorizedException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
 
       if (error.response?.status === 400) {
         const errorData = error.response.data;
         if (errorData.error === 'invalid_grant') {
-          throw new BadRequestException('Invalid authorization code or code verifier');
+          throw new BadRequestException(
+            'Invalid authorization code or code verifier',
+          );
         }
         throw new BadRequestException('Invalid authorization code');
       }
 
       // Convert domain service errors to appropriate HTTP exceptions
-      if (error.message.includes('Authorization code is required') ||
+      if (
+        error.message.includes('Authorization code is required') ||
         error.message.includes('Code verifier is required') ||
         error.message.includes('Code verifier must be between') ||
-        error.message.includes('Code verifier contains invalid characters')) {
+        error.message.includes('Code verifier contains invalid characters')
+      ) {
         throw new BadRequestException(error.message);
       }
 
@@ -156,15 +203,23 @@ export class MobileTokenValidationService {
   /**
    * Get Google user info from access token
    */
-  async getUserInfoFromAccessToken(accessToken: string): Promise<GoogleUserInfo> {
-    const context = { module: 'MobileTokenValidationService', method: 'getUserInfoFromAccessToken' };
+  async getUserInfoFromAccessToken(
+    accessToken: string,
+  ): Promise<GoogleUserInfo> {
+    const context = {
+      module: 'MobileTokenValidationService',
+      method: 'getUserInfoFromAccessToken',
+    };
 
     try {
       this.logger.logger('Fetching user info from Google API', context);
 
-      const response = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
+      const response = await axios.get(
+        'https://www.googleapis.com/oauth2/v3/userinfo',
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
+      );
 
       const userData = response.data;
 
@@ -174,7 +229,11 @@ export class MobileTokenValidationService {
         googleId: userData.sub,
         email: userData.email,
         firstName: userData.given_name || userData.name,
-        lastName: userData.family_name || (userData.name ? String(userData.name).split(' ').slice(1).join(' ') : ''),
+        lastName:
+          userData.family_name ||
+          (userData.name
+            ? String(userData.name).split(' ').slice(1).join(' ')
+            : ''),
         picture: userData.picture,
       };
 

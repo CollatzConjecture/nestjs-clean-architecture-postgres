@@ -15,8 +15,14 @@ import { LoginAuthDto } from '@api/dto/auth/login-auth.dto';
 import { MobileAppleAuthDto } from '@api/dto/auth/mobile-apple-auth.dto';
 import { MobileGoogleAuthDto } from '@api/dto/auth/mobile-google-auth.dto';
 import { RegisterAuthDto } from '@api/dto/auth/register-auth.dto';
-import { AppleAuthUserPayload, CreateAppleAuthUserCommand } from '@application/auth/command/create-apple-auth-user.command';
-import { CreateGoogleAuthUserCommand, GoogleAuthUserPayload } from '@application/auth/command/create-google-auth-user.command';
+import {
+  AppleAuthUserPayload,
+  CreateAppleAuthUserCommand,
+} from '@application/auth/command/create-apple-auth-user.command';
+import {
+  CreateGoogleAuthUserCommand,
+  GoogleAuthUserPayload,
+} from '@application/auth/command/create-google-auth-user.command';
 import { CreateAuthUserCommand } from '@application/auth/command/create-auth-user.command';
 import { DeleteAuthUserCommand } from '@application/auth/command/delete-auth-user.command';
 import { AppleOAuthConfigService } from '@application/services/apple-oauth-config.service';
@@ -29,7 +35,7 @@ import {
   GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET,
   JWT_REFRESH_EXPIRATION_TIME,
-  JWT_REFRESH_SECRET
+  JWT_REFRESH_SECRET,
 } from '@constants';
 import { AuthUser } from '@domain/entities/Auth';
 import { IAuthRepository } from '@domain/interfaces/repositories/auth-repository.interface';
@@ -53,11 +59,9 @@ export class AuthService {
     private readonly mobileOAuthConfig: MobileOAuthConfigService,
     private readonly appleTokenValidation: AppleTokenValidationService,
     private readonly appleOAuthConfig: AppleOAuthConfigService,
-  ) { }
+  ) {}
 
-  async register(
-    registerDto: RegisterAuthDto,
-  ): Promise<{
+  async register(registerDto: RegisterAuthDto): Promise<{
     access_token: string;
     refresh_token: string;
     profile: {
@@ -73,14 +77,19 @@ export class AuthService {
     const context = { module: 'AuthService', method: 'register' };
 
     // Execute the registration command
-    await this.commandBus.execute(new CreateAuthUserCommand(registerDto, authId, profileId));
+    await this.commandBus.execute(
+      new CreateAuthUserCommand(registerDto, authId, profileId),
+    );
 
     // Wait a brief moment for the user to be created in the database
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     const auth = await this.authRepository.findById(authId);
     if (!auth) {
-      this.logger.err(`Failed to find created user with ID: ${authId}`, context);
+      this.logger.err(
+        `Failed to find created user with ID: ${authId}`,
+        context,
+      );
       throw new Error('Registration failed - user not found after creation');
     }
 
@@ -99,19 +108,22 @@ export class AuthService {
       // ignore
     }
 
-    this.logger.logger(`User registered and authenticated successfully: ${auth.email}`, context);
+    this.logger.logger(
+      `User registered and authenticated successfully: ${auth.email}`,
+      context,
+    );
 
     return {
       access_token: accessToken,
       refresh_token: refreshToken,
       profile: profile
         ? {
-          id: profile.id,
-          authId: profile.authId,
-          name: profile.name,
-          lastname: profile.lastname,
-          age: profile.age,
-        }
+            id: profile.id,
+            authId: profile.authId,
+            name: profile.name,
+            lastname: profile.lastname,
+            age: profile.age,
+          }
         : null,
     };
   }
@@ -137,13 +149,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email format');
     }
 
-    const auth = await this.authRepository.findByEmail(loginDto.email, true);
+    const auth = await this.authRepository.findByEmail(email, true);
 
     if (!auth) {
       this.logger.logger(`User ${email} not found.`, context);
       throw new NotFoundException('User not found');
     }
-    if (!(await bcrypt.compare(loginDto.password, auth.password))) {
+
+    if (!(await bcrypt.compare(password, auth.password))) {
       this.logger.warning(`Failed login attempt for user ${email}.`, context);
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -154,7 +167,6 @@ export class AuthService {
 
     const profile = await this.profileRepository.findByAuthId(auth.id);
 
-    // Generate tokens
     const { accessToken, refreshToken } = await this.generateTokens(auth);
 
     // Store refresh token hash
@@ -163,20 +175,18 @@ export class AuthService {
       currentHashedRefreshToken: hashedRefreshToken,
     });
 
-    const payload = { email: auth.email, sub: auth.id, roles: auth.role };
-
     this.logger.logger(`User ${email} logged in successfully.`, context);
     return {
       access_token: accessToken,
       refresh_token: refreshToken,
       profile: profile
         ? {
-          id: profile.id,
-          authId: profile.authId,
-          name: profile.name,
-          lastname: profile.lastname,
-          age: profile.age,
-        }
+            id: profile.id,
+            authId: profile.authId,
+            name: profile.name,
+            lastname: profile.lastname,
+            age: profile.age,
+          }
         : null,
     };
   }
@@ -219,7 +229,8 @@ export class AuthService {
       }
 
       // Generate new tokens
-      const { accessToken, refreshToken: newRefreshToken } = await this.generateTokens(auth);
+      const { accessToken, refreshToken: newRefreshToken } =
+        await this.generateTokens(auth);
 
       // Store new refresh token hash (token rotation)
       const hashedRefreshToken = await bcrypt.hash(newRefreshToken, 10);
@@ -270,14 +281,14 @@ export class AuthService {
   initiateGoogleAuth() {
     const state = crypto.randomBytes(20).toString('hex');
     const redirectUrl =
-      `https://accounts.google.com/o/oauth2/v2/auth?` +
+      'https://accounts.google.com/o/oauth2/v2/auth?' +
       `client_id=${GOOGLE_CLIENT_ID}` +
       `&redirect_uri=${encodeURIComponent(GOOGLE_CALLBACK_URL)}` +
-      `&response_type=code` +
-      `&scope=openid%20email%20profile` +
-      `&access_type=offline` +
+      '&response_type=code' +
+      '&scope=openid%20email%20profile' +
+      '&access_type=offline' +
       `&state=${state}`;
-    this.logger.logger(`Initiating Google OAuth.`, {
+    this.logger.logger('Initiating Google OAuth.', {
       module: 'AuthService',
       method: 'initiateGoogleAuth',
     });
@@ -286,7 +297,7 @@ export class AuthService {
 
   async handleGoogleRedirect(code: string, state: string, storedState: string) {
     if (!state || state !== storedState) {
-      this.logger.logger(`Invalid state or state mismatch.`, {
+      this.logger.logger('Invalid state or state mismatch.', {
         module: 'AuthService',
         method: 'handleGoogleRedirect',
       });
@@ -346,7 +357,9 @@ export class AuthService {
       });
 
       if (!this.mobileOAuthConfig.isPlatformConfigured(platform)) {
-        throw new BadRequestException(`Google OAuth not configured for ${platform}`);
+        throw new BadRequestException(
+          `Google OAuth not configured for ${platform}`,
+        );
       }
 
       let googleUserInfo;
@@ -355,10 +368,18 @@ export class AuthService {
 
       if (hasIdToken) {
         // ID Token flow
-        googleUserInfo = await this.mobileTokenValidation.validateIdToken(idToken, platform);
+        googleUserInfo = await this.mobileTokenValidation.validateIdToken(
+          idToken,
+          platform,
+        );
       } else {
         // Authorization Code flow with PKCE
-        googleUserInfo = await this.mobileTokenValidation.validateAuthorizationCode(code, code_verifier, platform);
+        googleUserInfo =
+          await this.mobileTokenValidation.validateAuthorizationCode(
+            code,
+            code_verifier,
+            platform,
+          );
       }
 
       const googleProfile: GoogleAuthUserPayload & { picture?: string } = {
@@ -373,17 +394,25 @@ export class AuthService {
       const authResponse = await this.findOrCreateGoogleUser(googleProfile);
       return authResponse;
     } catch (error) {
-      this.logger.err(`Mobile Google authentication failed for ${platform}: ${error.message}`, context);
+      this.logger.err(
+        `Mobile Google authentication failed for ${platform}: ${error.message}`,
+        context,
+      );
 
       // Convert domain service errors to appropriate HTTP exceptions
-      if (error.message.includes('Unsupported platform') ||
+      if (
+        error.message.includes('Unsupported platform') ||
         error.message.includes('Cannot provide both idToken and code') ||
         error.message.includes('Either idToken or code must be provided') ||
-        error.message.includes('Code verifier is required')) {
+        error.message.includes('Code verifier is required')
+      ) {
         throw new BadRequestException(error.message);
       }
 
-      if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof UnauthorizedException
+      ) {
         throw error;
       }
 
@@ -398,7 +427,8 @@ export class AuthService {
     try {
       this.authDomainService.validateAppleIdTokenFormat(idToken);
 
-      const configValidation = this.appleOAuthConfig.validatePlatformConfiguration(platform);
+      const configValidation =
+        this.appleOAuthConfig.validatePlatformConfiguration(platform);
       if (!configValidation.valid) {
         this.logger.err(
           `Apple OAuth configuration invalid for ${platform}: ${configValidation.errors.join(', ')}`,
@@ -409,7 +439,10 @@ export class AuthService {
         );
       }
 
-      const appleUserInfo = await this.appleTokenValidation.validateIdToken(idToken, platform);
+      const appleUserInfo = await this.appleTokenValidation.validateIdToken(
+        idToken,
+        platform,
+      );
 
       const appleProfile: AppleAuthUserPayload = {
         appleId: appleUserInfo.appleId,
@@ -428,7 +461,10 @@ export class AuthService {
         context,
       );
 
-      if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof UnauthorizedException
+      ) {
         throw error;
       }
 
@@ -436,7 +472,9 @@ export class AuthService {
     }
   }
 
-  async findOrCreateGoogleUser(profile: GoogleAuthUserPayload & { picture?: string }) {
+  async findOrCreateGoogleUser(
+    profile: GoogleAuthUserPayload & { picture?: string },
+  ) {
     const context = { module: 'AuthService', method: 'findOrCreateGoogleUser' };
 
     let auth = await this.authRepository.findByGoogleId(profile.googleId);
@@ -449,7 +487,9 @@ export class AuthService {
           googleId: profile.googleId,
         });
       } else {
-        const existingUser = await this.authRepository.findByEmail(profile.email);
+        const existingUser = await this.authRepository.findByEmail(
+          profile.email,
+        );
         const canCreate = this.authDomainService.canCreateUser(existingUser);
         if (!canCreate) {
           throw new BadRequestException('User already exists with this email');
@@ -473,12 +513,17 @@ export class AuthService {
         );
 
         // Wait a brief moment for the user to be created in the database
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
 
         auth = await this.authRepository.findById(authId);
         if (!auth) {
-          this.logger.err(`Failed to find created Google user with ID: ${authId}`, context);
-          throw new Error('Google registration failed - user not found after creation');
+          this.logger.err(
+            `Failed to find created Google user with ID: ${authId}`,
+            context,
+          );
+          throw new Error(
+            'Google registration failed - user not found after creation',
+          );
         }
       }
     }
@@ -503,12 +548,12 @@ export class AuthService {
       refresh_token: refreshToken,
       profile: userProfile
         ? {
-          id: userProfile.id,
-          authId: userProfile.authId,
-          name: userProfile.name,
-          lastname: userProfile.lastname,
-          age: userProfile.age,
-        }
+            id: userProfile.id,
+            authId: userProfile.authId,
+            name: userProfile.name,
+            lastname: userProfile.lastname,
+            age: userProfile.age,
+          }
         : null,
     };
   }
@@ -520,7 +565,10 @@ export class AuthService {
     authId: string,
     googleProfile: GoogleAuthUserPayload & { picture?: string },
   ) {
-    const context = { module: 'AuthService', method: 'updateProfileWithGoogleData' };
+    const context = {
+      module: 'AuthService',
+      method: 'updateProfileWithGoogleData',
+    };
 
     try {
       const existingProfile = await this.profileRepository.findByAuthId(authId);
@@ -548,7 +596,10 @@ export class AuthService {
         }
       }
     } catch (error) {
-      this.logger.err(`Failed to update profile with Google data: ${error.message}`, context);
+      this.logger.err(
+        `Failed to update profile with Google data: ${error.message}`,
+        context,
+      );
       // Don't throw error as this is not critical for authentication
     }
   }
@@ -566,7 +617,9 @@ export class AuthService {
           appleId: profile.appleId,
         });
       } else {
-        const existingUser = await this.authRepository.findByEmail(profile.email);
+        const existingUser = await this.authRepository.findByEmail(
+          profile.email,
+        );
         const canCreate = this.authDomainService.canCreateUser(existingUser);
         if (!canCreate) {
           throw new BadRequestException('User already exists with this email');
@@ -590,12 +643,17 @@ export class AuthService {
         );
 
         // Wait a brief moment for the user to be created in the database
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
 
         auth = await this.authRepository.findById(authId);
         if (!auth) {
-          this.logger.err(`Failed to find created Apple user with ID: ${authId}`, context);
-          throw new Error('Apple registration failed - user not found after creation');
+          this.logger.err(
+            `Failed to find created Apple user with ID: ${authId}`,
+            context,
+          );
+          throw new Error(
+            'Apple registration failed - user not found after creation',
+          );
         }
       }
     }
@@ -621,21 +679,27 @@ export class AuthService {
       refresh_token: refreshToken,
       profile: userProfile
         ? {
-          id: userProfile.id,
-          authId: userProfile.authId,
-          name: userProfile.name,
-          lastname: userProfile.lastname,
-          age: userProfile.age,
-        }
-        : null
+            id: userProfile.id,
+            authId: userProfile.authId,
+            name: userProfile.name,
+            lastname: userProfile.lastname,
+            age: userProfile.age,
+          }
+        : null,
     };
   }
 
   /**
    * Update profile with Apple account information
    */
-  private async updateProfileWithAppleData(authId: string, appleProfile: AppleAuthUserPayload) {
-    const context = { module: 'AuthService', method: 'updateProfileWithAppleData' };
+  private async updateProfileWithAppleData(
+    authId: string,
+    appleProfile: AppleAuthUserPayload,
+  ) {
+    const context = {
+      module: 'AuthService',
+      method: 'updateProfileWithAppleData',
+    };
 
     try {
       const existingProfile = await this.profileRepository.findByAuthId(authId);
@@ -663,15 +727,25 @@ export class AuthService {
         }
       }
     } catch (error) {
-      this.logger.err(`Failed to update profile with Apple data: ${error.message}`, context);
+      this.logger.err(
+        `Failed to update profile with Apple data: ${error.message}`,
+        context,
+      );
       // Don't throw error as this is not critical for authentication
     }
   }
 
-  async changePassword(userId: string, oldPassword: string, newPassword: string): Promise<{ message: string }> {
+  async changePassword(
+    userId: string,
+    oldPassword: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
     const context = { module: 'AuthService', method: 'changePassword' };
 
-    this.authDomainService.validatePasswordChangeData({ oldPassword, newPassword });
+    this.authDomainService.validatePasswordChangeData({
+      oldPassword,
+      newPassword,
+    });
 
     const auth = await this.authRepository.findById(userId, true);
     if (!auth) {
@@ -689,7 +763,10 @@ export class AuthService {
       currentHashedRefreshToken: null,
     });
 
-    this.logger.logger(`Password changed successfully for user: ${auth.email}`, context);
+    this.logger.logger(
+      `Password changed successfully for user: ${auth.email}`,
+      context,
+    );
     return { message: 'Password changed successfully' };
   }
 
