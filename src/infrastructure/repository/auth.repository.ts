@@ -3,11 +3,12 @@ import { IAuthRepository } from '@domain/interfaces/repositories/auth-repository
 import { AuthEntity } from '@infrastructure/entities/auth.entity';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { FindOptionsWhere, IsNull, Repository } from 'typeorm';
 
 export type AuthUserResponse = AuthUser & {
   createdAt: Date;
   updatedAt: Date;
+  deletedAt: Date | null;
 };
 
 @Injectable()
@@ -55,14 +56,22 @@ export class AuthRepository implements IAuthRepository {
   }
 
   async findByAppleId(appleId: string): Promise<AuthUser | null> {
-    const auth = await this.authRepository.findOne({
-      where: { appleId, deletedAt: IsNull() } as any,
-    });
+    const where: FindOptionsWhere<AuthEntity> = {
+      appleId,
+      deletedAt: IsNull(),
+    };
+
+    const auth = await this.authRepository.findOne({ where });
     return auth ? this.mapToAuthUser(auth) : null;
   }
 
   async update(id: string, authData: Partial<AuthUser>): Promise<AuthUser> {
-    const result = await this.authRepository.update({ id }, authData);
+    const criteria: FindOptionsWhere<AuthEntity> = {
+      id,
+      deletedAt: IsNull(),
+    };
+
+    const result = await this.authRepository.update(criteria, authData);
 
     if (result.affected === 0) {
       throw new Error('Auth user not found');
@@ -77,11 +86,18 @@ export class AuthRepository implements IAuthRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await this.authRepository.delete({ id });
+    await this.authRepository.softDelete({ id });
   }
 
   async removeRefreshToken(id: string): Promise<void> {
-    await this.authRepository.update({ id }, { currentHashedRefreshToken: null });
+    const criteria: FindOptionsWhere<AuthEntity> = {
+      id,
+      deletedAt: IsNull(),
+    };
+
+    await this.authRepository.update(criteria, {
+      currentHashedRefreshToken: null,
+    });
   }
 
   private mapToAuthUser(authEntity: AuthEntity): AuthUserResponse {
@@ -93,8 +109,10 @@ export class AuthRepository implements IAuthRepository {
       appleId: authEntity.appleId,
       role: authEntity.role,
       currentHashedRefreshToken: authEntity.currentHashedRefreshToken,
+      lastLoginAt: authEntity.lastLoginAt,
       createdAt: authEntity.createdAt,
       updatedAt: authEntity.updatedAt,
+      deletedAt: authEntity.deletedAt ?? null,
     };
   }
 }

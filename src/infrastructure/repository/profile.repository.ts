@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, IsNull, Repository } from 'typeorm';
 import { Profile } from '@domain/entities/Profile';
 import { Role } from '@domain/entities/enums/role.enum';
 import { IProfileRepository } from '@domain/interfaces/repositories/profile-repository.interface';
@@ -9,6 +9,7 @@ import { ProfileEntity } from '@infrastructure/entities/profile.entity';
 export type ProfileResponse = Profile & {
   createdAt: Date;
   updatedAt: Date;
+  deletedAt: Date | null;
 };
 
 @Injectable()
@@ -60,7 +61,12 @@ export class ProfileRepository implements IProfileRepository {
   }
 
   async update(id: string, profileData: Partial<Profile>): Promise<Profile> {
-    const updateResult = await this.profileRepository.update(id, profileData);
+    const criteria: FindOptionsWhere<ProfileEntity> = {
+      id,
+      deletedAt: IsNull(),
+    };
+
+    const updateResult = await this.profileRepository.update(criteria, profileData);
     
     if (updateResult.affected === 0) {
       throw new Error('Profile not found');
@@ -70,12 +76,12 @@ export class ProfileRepository implements IProfileRepository {
       where: { id },
       relations: ['auth'],
     });
-    
+
     return this.mapToProfile(updatedProfile);
   }
 
   async delete(id: string): Promise<void> {
-    await this.profileRepository.delete(id);
+    await this.profileRepository.softDelete({ id });
   }
 
   private mapToProfile(profileEntity: ProfileEntity): ProfileResponse {
@@ -87,6 +93,7 @@ export class ProfileRepository implements IProfileRepository {
       age: profileEntity.age,
       createdAt: profileEntity.createdAt,
       updatedAt: profileEntity.updatedAt,
+      deletedAt: profileEntity.deletedAt ?? null,
     };
   }
 }

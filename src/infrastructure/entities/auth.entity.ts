@@ -1,19 +1,18 @@
 import { Role } from '@domain/entities/enums/role.enum';
 import { ProfileEntity } from '@infrastructure/entities/profile.entity';
+import { SoftDeletableEntity } from '@infrastructure/entities/base/soft-deletable.entity';
 import * as bcrypt from 'bcrypt';
 import {
   BeforeInsert,
   BeforeUpdate,
   Column,
-  CreateDateColumn,
   Entity,
   OneToOne,
-  PrimaryColumn,
-  UpdateDateColumn,
+  PrimaryColumn
 } from 'typeorm';
 
 @Entity('auths')
-export class AuthEntity {
+export class AuthEntity extends SoftDeletableEntity {
   @PrimaryColumn({ name: 'id' })
   id: string;
 
@@ -44,12 +43,6 @@ export class AuthEntity {
 
   @OneToOne(() => ProfileEntity, profile => profile.auth)
   profile: ProfileEntity;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
 
   @BeforeInsert()
   async beforeInsert() {

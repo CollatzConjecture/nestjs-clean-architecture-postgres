@@ -1,8 +1,9 @@
-import { Entity, PrimaryColumn, Column, CreateDateColumn, UpdateDateColumn, OneToOne, JoinColumn } from 'typeorm';
 import { AuthEntity } from '@infrastructure/entities/auth.entity';
+import { SoftDeletableEntity } from '@infrastructure/entities/base/soft-deletable.entity';
+import { Column, Entity, JoinColumn, OneToOne, PrimaryColumn } from 'typeorm';
 
 @Entity('profiles')
-export class ProfileEntity {
+export class ProfileEntity extends SoftDeletableEntity {
   @PrimaryColumn()
   id: string;
 
@@ -21,10 +22,4 @@ export class ProfileEntity {
 
   @Column({ nullable: true })
   age?: number;
-
-  @CreateDateColumn()
-  createdAt: Date;
-
-  @UpdateDateColumn()
-  updatedAt: Date;
 } 
