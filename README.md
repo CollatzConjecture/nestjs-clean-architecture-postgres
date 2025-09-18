@@ -32,8 +32,10 @@ If you want more documentation about NestJS, click here [Nest](https://github.co
 
 - **JWT Authentication**: Implements secure, token-based authentication with refresh token rotation.
 - **Google OAuth2 Integration**: Secure third-party authentication with Google accounts for both web and mobile applications.
+- **Apple Sign In**: Native Sign in with Apple support for iOS and Android clients using Apple ID tokens.
 - **Web OAuth2**: Traditional OAuth2 flow with CSRF protection using state parameters and browser redirects.
 - **Mobile OAuth2**: Direct token exchange for mobile applications using Google ID tokens.
+- **JWKS-Based Token Validation**: Uses remote JSON Web Key Sets (JWKS) for signature verification of Google and Apple ID tokens.
 - **Role-Based Access Control (RBAC)**: Complete implementation with protected routes and role-based guards.
 - **Secure Password Storage**: Hashes passwords using `bcrypt` with salt rounds.
 - **Sensitive Data Encryption**: Encrypts sensitive fields (e.g., user emails) at rest in the database using AES-256-CBC.
@@ -220,7 +222,14 @@ This project follows a strict 4-layer architecture:
    Domain Service (validation) → FindOrCreateUser → JWT Token Generation
    ```
 
-6. **Error Handling**:
+6. **Apple Sign In Flow (Mobile)**:
+
+   ```
+   /auth/mobile/apple → Apple ID Token Validation via JWKS →
+   Domain Service (validation) → FindOrCreateUser → JWT Token Generation
+   ```
+
+7. **Error Handling**:
    ```
    ProfileCreationFailed Event → RegistrationSaga →
    DeleteAuthUser (Compensating Transaction)
@@ -239,6 +248,7 @@ This project follows a strict 4-layer architecture:
 - Docker and Docker Compose
 - PostgreSQL (included in Docker Compose)
 - Google OAuth2 credentials (for Google login functionality)
+- Apple Sign In credentials (for Apple login functionality)
 
 ## 🐳 Running with Docker Compose
 
@@ -320,6 +330,7 @@ GET  /auth/google           # Initiate Google OAuth login (Web)
 GET  /auth/google/oauth2redirect  # Google OAuth callback (Web)
 POST /auth/google/mobile/ios     # Google OAuth login for iOS apps
 POST /auth/google/mobile/android # Google OAuth login for Android apps
+POST /auth/mobile/apple          # Apple Sign In for mobile apps (iOS/Android)
 GET  /auth/:id              # Get user by auth ID (Protected)
 DELETE /auth/:id            # Delete user by auth ID (Protected)
 ```
@@ -401,6 +412,20 @@ curl -X POST http://localhost:4000/auth/google/mobile/android \
   -H "Content-Type: application/json" \
   -d '{
     "idToken": "GOOGLE_ID_TOKEN_FROM_ANDROID_APP"
+  }'
+
+# Returns JWT token upon successful authentication
+```
+
+#### Apple Sign In
+
+```bash
+# Apple login with ID token
+curl -X POST http://localhost:4000/auth/mobile/apple \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "ios",
+    "idToken": "APPLE_ID_TOKEN_FROM_CLIENT"
   }'
 
 # Returns JWT token upon successful authentication
@@ -587,6 +612,33 @@ curl -X GET http://localhost:4000/profile/all \
     - The backend validates these ID tokens without requiring client secrets
     - Platform-specific client IDs provide additional validation and security
 
+5.  **Configure Apple Sign In (Optional):**
+
+    To enable Sign in with Apple for your mobile applications:
+
+    a. Sign in to the [Apple Developer portal](https://developer.apple.com/account/)
+
+    b. Create an App Identifier that supports Sign in with Apple for each platform bundle ID
+
+    c. Generate a Services ID for web/mobile authentication and enable Sign in with Apple
+
+    d. Create a private key (p8 file) associated with the Sign in with Apple service
+
+    e. Add the following variables to your `.env` file:
+
+    ```env
+    APPLE_TEAM_ID=your_apple_team_id
+    APPLE_KEY_ID=your_key_id
+    APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+    APPLE_IOS_CLIENT_ID=your_ios_service_id
+    APPLE_ANDROID_CLIENT_ID=your_android_service_id
+    # Optional comma-separated list of additional audience values
+    APPLE_IOS_ADDITIONAL_AUDIENCES=
+    APPLE_ANDROID_ADDITIONAL_AUDIENCES=
+    ```
+
+    f. Provide the corresponding `platform` value (`ios` or `android`) and the Apple ID token from the client when calling `/auth/mobile/apple`.
+
 ## 🔒 Security Features
 
 ### Authentication Security
@@ -596,6 +648,8 @@ curl -X GET http://localhost:4000/profile/all \
 - **OAuth2 Security**:
   - **Web**: CSRF protection using state parameters in OAuth flows
   - **Mobile**: Direct ID token validation for mobile applications
+  - **JWKS Validation**: All Google and Apple ID tokens are verified against their official JWKS endpoints before trust
+- **Apple Sign In**: Supports native Sign in with Apple flows for iOS and Android using platform-specific audiences
 - **Rate Limiting**: Configurable throttling on sensitive endpoints
 
 ### Data Protection
